@@ -17,9 +17,6 @@ var mapstraction = new mxn.Mapstraction('mymap', 'googlev3');
 mapstraction.setCenterAndZoom(new mxn.LatLonPoint(40.7346,-74.0632), 15);
 mapstraction.getMap().setOptions({zoomControl: true, panControl: true});
 mapstraction.addMapTypeControls();
-mapstraction.addEventListener('click', function(clickpoint) {
-alert('latitude: ' + clickpoint.lat + '\nlongitude: ' + clickpoint.lon);
-});
 }
 
 </script>
