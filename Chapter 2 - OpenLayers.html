@@ -1,0 +1,29 @@
+<html>
+<head>
+   	<title>Map2: Markers - Vinay Gandra</title>
+   	<script src="http://openlayers.org/api/OpenLayers.js"></script>
+   	<script src="http://mapstraction.com/mxn/build/latest/mxn.js?(openlayers)" type="text/javascript"></script>
+	<style type="text/css">
+	#map {
+		width: 800px;
+		height: 600px;
+	}
+	</style>
+</head>
+<body>
+	<div id="map"></div>
+	<script type="text/javascript">
+		var map = new mxn.Mapstraction('map', 'openlayers'); 
+		var latlon = new mxn.LatLonPoint(40.7320425,-74.0639755);
+
+		map.setCenterAndZoom(latlon, 16);
+		var marker = new mxn.Marker(new mxn.LatLonPoint(40.7336028,-74.0637127));
+		map.addSmallControls();
+		map.addMapTypeControls();
+		marker.setInfoBubble("Chase Bank");
+		marker.setIcon('http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=1|0000FF|000000');
+		marker.setShadowIcon('http://chart.apis.google.com/chart?chst=d_map_pin_shadow');
+		map.addMarker(marker);		
+	</script>
+</body>
+</html>		
