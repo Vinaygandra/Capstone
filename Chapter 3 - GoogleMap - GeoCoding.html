@@ -1,0 +1,42 @@
+<html>
+<head>
+<title>Map3: GeoCoding - Vinay Gandra</title>
+<script
+src="http://maps.google.com/maps/api/js?sensor=false"
+type="text/javascript"></script>
+<script type="text/javascript" src="mxn.js?(googlev3)"></script>
+<script src="mxn.google.geocoder.js"></script>
+<style type="text/css">
+div#mymap {
+width: 800px;
+height: 550px;
+}
+</style>
+<script type="text/javascript">
+var mapstraction, geocoder;
+function create_map() {
+mapstraction = new mxn.Mapstraction('mymap', 'googlev3');
+mapstraction.setCenterAndZoom(new mxn.LatLonPoint(add_point), 12);
+geocoder = new MapstractionGeocoder(add_point, 'googlev3');
+// Create address object
+var address = {
+street : "26 Oxford Street",
+locality : "Cambridge",
+region : "MA",
+country : "US"
+};
+geocoder.geocode(address);
+}
+function add_point(loc) {
+var mk = new mxn.Marker(loc.point);
+mk.setInfoBubble(loc.address);
+mapstraction.addMarker(mk);
+mk.openBubble();
+mapstraction.autoCenterAndZoom();
+}
+</script>
+</head>
+<body onload="create_map()">
+<div id="mymap"></div>
+</body>
+</html>
