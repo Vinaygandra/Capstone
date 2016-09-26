@@ -1,11 +1,11 @@
-mxn.register('openlayers', {	
+mxn.register('openlayersv3', {	
 
 	Mapstraction: {
-
+	
 		init: function(element, api){
 			var me = this;
 			
-			if (typeof OpenLayers.Map === 'undefined') {
+			if (typeof ol.Map === 'undefined') {
 				throw new Error(api + ' map script not imported');
 			}
 
@@ -16,70 +16,61 @@ mxn.register('openlayers', {
 				scale: null,
 				map_type: null
 			};
-
-			var map = new OpenLayers.Map(
-				element.id,
-				{
-					projection: 'EPSG:900913',
-					controls: [
-						new OpenLayers.Control.Navigation(),
-						new OpenLayers.Control.ArgParser(),
-						new OpenLayers.Control.Attribution()
-					]
-				}
-			);
+			
+			var osm = new ol.layer.TileLayer({
+				  source: new ol.source.OSM()
+			});
 				
+			var aerial = new ol.layer.TileLayer({
+			  source: new ol.source.MapQuestOpenAerial(),
+			  visible: false
+			});
+				
+			var map = new ol.Map({
+			  view: new ol.View2D({
+				center: [0, 0],
+				zoom: 3
+			  }),
+			  layers: [osm, aerial],
+			  target: element,
+			  renderer: ol.RendererHint.CANVAS //needed as webGL doesn't support vector layers yet
+			});
+			
 			// initialize layers map (this was previously in mxn.core.js)
 			this.layers = {};
-
-			// create OSM layer using all 3 hostnames
-			this.layers.osm = new OpenLayers.Layer.OSM("OpenStreetMap",
-			  ["http://a.tile.openstreetmap.org/${z}/${x}/${y}.png",
-			   "http://b.tile.openstreetmap.org/${z}/${x}/${y}.png",
-			   "http://c.tile.openstreetmap.org/${z}/${x}/${y}.png"]);
-		
+	
 			// deal with click
-			map.events.register('click', map, function(evt){
-				var lonlat = map.getLonLatFromViewPortPx(evt.xy);
+			map.on(['click'], function(evt) {
+				var lonlat = evt.getCoordinate();
 				var point = new mxn.LatLonPoint();
 				point.fromProprietary(api, lonlat);
 				me.click.fire({'location': point });
 			});
-
+			
 			// deal with zoom change
-			map.events.register('zoomend', map, function(evt){
+			map.on(['zoomend'], function(evt) {
 				me.changeZoom.fire();
 			});
 		
 			// deal with map movement
-			map.events.register('moveend', map, function(evt){
-				me.moveendHandler(me);
+			map.on(['moveend'], function(evt) {
 				me.endPan.fire();
 			});
 		
-			// deal with initial tile loading
-			var loadfire = function(e) {
-				me.load.fire();
-				this.events.unregister('loadend', this, loadfire);
-			};
-		
-			for (var layerName in this.layers) {
-				if (this.layers.hasOwnProperty(layerName)) {
-					if (this.layers[layerName].visibility === true) {
-						this.layers[layerName].events.register('loadend', this.layers[layerName], loadfire);
-					}
-				}
-			}
-		
-			map.addLayer(this.layers.osm);
-			this.tileLayers.push(["http://a.tile.openstreetmap.org/", this.layers.osm, true]);
 			this.maps[api] = map;
 			this.loaded[api] = true;
+			
+			/* map.on(['load'], function(evt) {
+				me.load.fire();
+			}); This doesn't work so use the hack below */
+			//doing the load.fire directly it runs too fast and we dont get a chance to register the handler in the core tests, so had to add a delay.
+			setTimeout(function(){me.load.fire();},50);
 		},
 
 		applyOptions: function(){
-			var map = this.maps[this.api],
-				navigators = map.getControlsByClass( 'OpenLayers.Control.Navigation' ),
+			var map = this.maps[this.api];
+			/*
+			var	navigators = map.getControlsByClass( 'ol.control.Navigation' ),
 				navigator;
 
 			if ( navigators.length > 0 ) {
@@ -94,7 +85,7 @@ mxn.register('openlayers', {
 				} else {
 					navigator.deactivate();
 				}
-			}
+			}*/
 		},
 
 		resizeTo: function(width, height){	
@@ -104,33 +95,23 @@ mxn.register('openlayers', {
 		},
 
 		addControls: function( args ) {
-			/* args = { 
-			 *     pan:      true,
-			 *     zoom:     'large' || 'small',
-			 *     overview: true,
-			 *     scale:    true,
-			 *     map_type: true,
-			 * }
-			 */
-
 			var map = this.maps[this.api];	
-			// FIXME: OpenLayers has a bug removing all the controls says crschmidt
 			/*for (var i = map.controls.length; i>1; i--) {
 				map.controls[i-1].deactivate();
 				map.removeControl(map.controls[i-1]);
 			}
 			if ( args.zoom == 'large' )	  {
-				map.addControl(new OpenLayers.Control.PanZoomBar());
+				map.addControl(new ol.control.PanZoomBar());
 			}
 			else if ( args.zoom == 'small' ) {
-				map.addControl(new OpenLayers.Control.ZoomPanel());
+				map.addControl(new ol.control.ZoomPanel());
 				if ( args.pan) {
-					map.addControl(new OpenLayers.Control.PanPanel()); 
+					map.addControl(new ol.control.PanPanel()); 
 				}
 			}
 			else {
 				if ( args.pan){
-					map.addControl(new OpenLayers.Control.PanPanel()); 
+					map.addControl(new ol.control.PanPanel()); 
 				}
 			}*/
 
@@ -146,7 +127,6 @@ mxn.register('openlayers', {
 
 			else {
 				if (this.controls.zoom !== null) {
-					this.controls.zoom.deactivate();
 					map.removeControl(this.controls.zoom);
 					this.controls.zoom = null;
 				}
@@ -156,14 +136,13 @@ mxn.register('openlayers', {
 			// the PanPanel if the 'zoom' arg is set ...
 			if ('pan' in args && args.pan && ((!'zoom' in args) || ('zoom' in args && args.zoom == 'small'))) {
 				if (this.controls.pan === null) {
-					this.controls.pan = new OpenLayers.Control.PanPanel();
+					this.controls.pan = new ol.control.PanPanel();
 					map.addControl(this.controls.pan);
 				}
 			}
 
 			else {
 				if (this.controls.pan !== null) {
-					this.controls.pan.deactivate();
 					map.removeControl(this.controls.pan);
 					this.controls.pan = null;
 				}
@@ -171,26 +150,26 @@ mxn.register('openlayers', {
 			
 			if ('overview' in args && args.overview) {
 				if (this.controls.overview === null) {
-					this.controls.overview = new OpenLayers.Control.OverviewMap();
+					/*
+					this.controls.overview = new ol.control.OverviewMap();
 					map.addControl(this.controls.overview);
+					*/
 				}
 			}
 
 			else {
 				if (this.controls.overview !== null) {
-					this.controls.overview.deactivate();
 					map.removeControl(this.controls.overview);
 					this.controls.overview = null;
 				}
 			}
 			
 			if ('map_type' in args && args.map_type) {
-				this.controls.map_type = this.addMapTypeControls();
+				//this.controls.map_type = this.addMapTypeControls();
 			}
 			
 			else {
 				if (this.controls.map_type !== null) {
-					this.controls.map_type.deactivate();
 					map.removeControl(this.controls.map_type);
 					this.controls.map_type = null;
 				}
@@ -198,14 +177,13 @@ mxn.register('openlayers', {
 
 			if ('scale' in args && args.scale) {
 				if (this.controls.scale === null) {
-					this.controls.scale = new OpenLayers.Control.ScaleLine();
+					this.controls.scale = new ol.control.ScaleLine();
 					map.addControl(this.controls.scale);
 				}
 			}
 
 			else {
 				if (this.controls.scale !== null) {
-					this.controls.scale.deactivate();
 					map.removeControl(this.controls.scale);
 					this.controls.scale = null;
 				}
@@ -220,7 +198,7 @@ mxn.register('openlayers', {
 				map.removeControl(this.controls.zoom);
 			}
 			// ZoomPanel == ZoomIn + ZoomOut + ZoomToMaxExtent
-			this.controls.zoom = new OpenLayers.Control.ZoomPanel();
+			this.controls.zoom = new ol.control.Zoom();
 			map.addControl(this.controls.zoom);
 			return this.controls.zoom;
 		},
@@ -232,7 +210,7 @@ mxn.register('openlayers', {
 				map.removeControl(this.controls.zoom);
 			}
 			// PanZoomBar == PanPanel + ZoomBar
-			this.controls.zoom = new OpenLayers.Control.PanZoomBar();
+			this.controls.zoom = new ol.control.ZoomSlider();
 			map.addControl(this.controls.zoom);
 			return this.controls.zoom;
 		},
@@ -242,8 +220,9 @@ mxn.register('openlayers', {
 			var control = null;
 			
 			if (this.controls.map_type === null) {
-				control = new OpenLayers.Control.LayerSwitcher({ 'ascending':false });
-				map.addControl(control);
+				/*
+				control = new ol.control.LayerSwitcher({ 'ascending':false });
+				map.addControl(control); */
 			}
 			
 			else {
@@ -256,7 +235,12 @@ mxn.register('openlayers', {
 		setCenterAndZoom: function(point, zoom) { 
 			var map = this.maps[this.api];
 			var pt = point.toProprietary(this.api);
-			map.setCenter(pt, zoom);
+			var view = new ol.View2D({
+				center: pt,
+				zoom: zoom
+			  });
+						
+			map.setView(view);
 		},
 
 		addMarker: function(marker, old) {
@@ -264,119 +248,11 @@ mxn.register('openlayers', {
 			var pin = marker.toProprietary(this.api);
 
 			if (!this.layers.markers) {
-				var default_style = new OpenLayers.Style({
-					'cursor'       : 'pointer',
-					'graphicZIndex': 2
-				});
-				var select_style = default_style;
-				var style_map = new OpenLayers.StyleMap({
-					'default': default_style,
-					'select' : select_style
-				});
-				this.layers.markers = new OpenLayers.Layer.Vector('markers', {
-					// events            : null,
-					// isBaseLayer       : false,
-					// isFixed           : false,
-					// features          : [],
-					// filter            : null,
-					// selectedFeatures  : [],
-					// unrenderedFeatures: {},
-					reportError          : true,
-					// style             : {},
-					styleMap             : style_map,
-					// strategies        : [],
-					// protocol          : null,
-					// renderers         : [],
-					// renderer          : null,
-					// rendererOptions   : {},
-					rendererOptions      : {
-						yOrdering: true,
-						zIndexing: true
-					}
-					// geometryType      : 'OpenLayers.Geometry.Point',
-					// drawn             : false,
-					// ratio             : 1.0
+				this.layers.markers = new ol.layer.Vector({
+					source: new ol.source.Vector({data: null}),
+					projection: ol.proj.get('EPSG:4326')			
 				});
 				map.addLayer(this.layers.markers);
-				select = new OpenLayers.Control.SelectFeature(this.layers.markers, {
-					// events        : null,
-					// multipleKey   : 'altKey',
-					// toggleKey     : 'ctrlKey',
-					multiple         : true,
-					clickout         : true,
-					// toggle        : true,
-					hover            : false,
-					highlightOnly    : true,
-					// box           : true,
-					// onBeforeSelect: null,
-					onSelect         : function(feature) {
-						feature.mapstraction_marker.click.fire();
-						select.unselect(feature);
-					},
-					// onUnselect    : null,
-					// scope         : {},
-					// geometryTypes : ['OpenLayers.Geometry.Point'],
-					// layer         : null,
-					// layers        : [],
-					// callbacks     : {},
-					// selectStyle   : {},
-					// renderIntent  : '',
-					// handlers      : {},
-					overFeature      : function(feature) {
-						var marker = feature.mapstraction_marker;
-						if (!!marker.hoverIconUrl) {
-							marker.setUrl(marker.hoverIconUrl);
-						}
-						if (marker.hover && !!marker.popup) {
-							marker.map.addPopup(marker.popup);
-							marker.popup.show();
-						}
-					},
-					outFeature       : function(feature) {
-						var marker = feature.mapstraction_marker;
-						if (!!marker.hoverIconUrl) {
-							var iconUrl = marker.iconUrl || 'http://openlayers.org/dev/img/marker-gold.png';
-							marker.setUrl(iconUrl);
-						}
-						if (marker.hover && !!marker.popup) {
-							marker.popup.hide();
-							marker.map.removePopup(marker.popup);
-						}
-					},
-					autoActivate     : true
-				});
-				drag = new OpenLayers.Control.DragFeature(this.layers.markers, {
-					// geometryTypes: ['OpenLayers.Geometry.Point'],
-					// onStart         : null,
-					// onDrag          : null,
-					// onComplete      : null,
-					// onEnter         : null,
-					// onLeave         : null,
-					documentDrag    : true,
-					// layer           : null,
-					// feature         : null,
-					// dragCallbacks   : {},
-					// featureCallbacks: {},
-					// lastPixel       : null,
-					autoActivate    : true
-				});
-				drag.handlers.drag.stopDown     = false;
-				drag.handlers.drag.stopUp       = false;
-				drag.handlers.drag.stopClick    = false;
-				drag.handlers.feature.stopDown  = false;
-				drag.handlers.feature.stopUp    = false;
-				drag.handlers.feature.stopClick = false;
-				drag.onStart = function(feature,pixel) {
-					if (feature.mapstraction_marker.draggable !== true) {
-						drag.handlers.drag.deactivate();
-					}
-				};
-				
-				map.addControls([select, drag]);
-				
-				//Not actually needed, as not referenced anywhere else, but just for completeness:
-				this.controls.drag = drag;
-				this.controls.select = select;
 			}
 			this.layers.markers.addFeatures([pin]);
 			return pin;
@@ -396,7 +272,10 @@ mxn.register('openlayers', {
 			var map = this.maps[this.api];
 			var pl = polyline.toProprietary(this.api);
 			if (!this.layers.polylines) {
-				this.layers.polylines = new OpenLayers.Layer.Vector('polylines');
+				this.layers.polylines = new ol.layer.Vector({
+					source: new ol.source.Vector({data: null}),
+					projection: ol.proj.get('EPSG:4326')
+				});
 				map.addLayer(this.layers.polylines);
 			}
 			this.layers.polylines.addFeatures([pl]);
@@ -421,7 +300,7 @@ mxn.register('openlayers', {
 
 		getCenter: function() {
 			var map = this.maps[this.api];
-			var pt = map.getCenter();
+			var pt = map.getView().getCenter();
 			var mxnPt = new mxn.LatLonPoint();
 			mxnPt.fromProprietary(this.api, pt);
 			return mxnPt;
@@ -430,17 +309,17 @@ mxn.register('openlayers', {
 		setCenter: function(point, options) {
 			var map = this.maps[this.api];
 			var pt = point.toProprietary(this.api);
-			map.setCenter(pt);
+			map.getView().setCenter(pt);
 		},
 
 		setZoom: function(zoom) {
 			var map = this.maps[this.api];
-			map.zoomTo(zoom);
+			map.getView().setZoom(zoom);
 		},
 
 		getZoom: function() {
 			var map = this.maps[this.api];
-			return map.zoom;
+			return map.getView().getZoom();
 		},
 
 		getZoomLevelForBoundingBox: function( bbox ) {
@@ -453,7 +332,7 @@ mxn.register('openlayers', {
 				sw.lon -= 360;
 			}
 
-			var obounds = new OpenLayers.Bounds();
+			var obounds = new ol.extent();
 			
 			obounds.extend(new mxn.LatLonPoint(sw.lat,sw.lon).toProprietary(this.api));
 			obounds.extend(new mxn.LatLonPoint(ne.lat,ne.lon).toProprietary(this.api));
@@ -464,52 +343,69 @@ mxn.register('openlayers', {
 		},
 
 		setMapType: function(type) {
-			// Only Open Street Map road map is implemented, so you can't change the Map Type
+			var map = this.maps[this.api];
+			
+			switch (type) {
+				case mxn.Mapstraction.ROAD:
+					map.getLayers().getAt(1).setVisible(false);
+					map.getLayers().getAt(0).setVisible(true);					
+					
+					break;
+				case mxn.Mapstraction.SATELLITE:
+					map.getLayers().getAt(1).setVisible(true);
+					map.getLayers().getAt(0).setVisible(false);
+					
+					break;
+				default:
+					options.mapTypeId = Microsoft.Maps.MapTypeId.road;
+			}
 		},
 
 		getMapType: function() {
-			// Only Open Street Map road map is implemented, so you can't change the Map Type
-			return mxn.Mapstraction.ROAD;
+			var map = this.maps[this.api];		
+			var maypType = mxn.Mapstraction.ROAD;
+			
+			if (map.getLayers().getAt(1).getVisible()) {
+				maypType = mxn.Mapstraction.SATELLITE;
+			}
+				
+			return maypType;
 		},
 
 		getBounds: function () {
 			var map = this.maps[this.api];
-			var olbox = map.calculateBounds();
-			var ol_sw = new OpenLayers.LonLat( olbox.left, olbox.bottom );
+			var olbox = map.getView().getView2D().calculateExtent(map.getSize());
+			
+			var ol_sw = [olbox[0], olbox[2]];
 			var mxn_sw = new mxn.LatLonPoint(0,0);
 			mxn_sw.fromProprietary( this.api, ol_sw );
-			var ol_ne = new OpenLayers.LonLat( olbox.right, olbox.top );
+			
+			var ol_ne = [olbox[1], olbox[3]];
 			var mxn_ne = new mxn.LatLonPoint(0,0);
 			mxn_ne.fromProprietary( this.api, ol_ne );
+			
 			return new mxn.BoundingBox(mxn_sw.lat, mxn_sw.lon, mxn_ne.lat, mxn_ne.lon);
 		},
 
 		setBounds: function(bounds) {
 			var map = this.maps[this.api];
-			var sw = bounds.getSouthWest();
-			var ne = bounds.getNorthEast();
-
-			if(sw.lon > ne.lon) {
-				sw.lon -= 360;
-			}
-
-			var obounds = new OpenLayers.Bounds();
+			var sw_ol = bounds.getSouthWest().toProprietary(this.api);
+			var ne_ol = bounds.getNorthEast().toProprietary(this.api);
+			var obounds = [sw_ol[0],ne_ol[0],sw_ol[1],ne_ol[1]];
 			
-			obounds.extend(new mxn.LatLonPoint(sw.lat,sw.lon).toProprietary(this.api));
-			obounds.extend(new mxn.LatLonPoint(ne.lat,ne.lon).toProprietary(this.api));
-			map.zoomToExtent(obounds);
+			map.getView().getView2D().fitExtent(obounds, map.getSize());
 		},
 
 		addImageOverlay: function(id, src, opacity, west, south, east, north, oContext) {
 			var map = this.maps[this.api];
-			var bounds = new OpenLayers.Bounds();
+			var bounds = new ol.Bounds();
 			bounds.extend(new mxn.LatLonPoint(south,west).toProprietary(this.api));
 			bounds.extend(new mxn.LatLonPoint(north,east).toProprietary(this.api));
-			var overlay = new OpenLayers.Layer.Image(
+			var overlay = new ol.Layer.Image(
 				id, 
 				src,
 				bounds,
-				new OpenLayers.Size(oContext.imgElm.width, oContext.imgElm.height),
+				new ol.Size(oContext.imgElm.width, oContext.imgElm.height),
 				{'isBaseLayer': false, 'alwaysInRange': true}
 			);
 			map.addLayer(overlay);
@@ -522,13 +418,13 @@ mxn.register('openlayers', {
 
 		addOverlay: function(url, autoCenterAndZoom) {
 			var map = this.maps[this.api];
-			var kml = new OpenLayers.Layer.GML("kml", url,{
-				'format'       : OpenLayers.Format.KML,
-				'formatOptions': new OpenLayers.Format.KML({
+			var kml = new ol.Layer.GML("kml", url,{
+				'format'       : ol.Format.KML,
+				'formatOptions': new ol.Format.KML({
 					'extractStyles'    : true,
 					'extractAttributes': true
 				}),
-				'projection'   : new OpenLayers.Projection('EPSG:4326')
+				'projection'   : new ol.Projection('EPSG:4326')
 			});
 			if (autoCenterAndZoom) {
 				var setExtent = function() {
@@ -542,28 +438,25 @@ mxn.register('openlayers', {
 
 		addTileLayer: function(tile_url, opacity, label, attribution, min_zoom, max_zoom, map_type, subdomains) {
 			var map = this.maps[this.api];
-			var new_tile_url = tile_url.replace(/\{Z\}/gi,'${z}').replace(/\{X\}/gi,'${x}').replace(/\{Y\}/gi,'${y}');
-			
 			if (typeof subdomains !== 'undefined') {
-				//make a new array of each subdomain.
-				var domain = [];
-				for(i = 0; i < subdomains.length; i++)
-				{
-					domain.push(mxn.util.getSubdomainTileURL(new_tile_url, subdomains[i]));
-				}
-			}	
-			
-			var overlay = new OpenLayers.Layer.OSM("OpenCycleMap", domain || new_tile_url);	
-			
-			if(!opacity) {
-				overlay.addOptions({opacity: opacity});
+				//Use the first subdomain only for now
+				tile_url = mxn.util.getSubdomainTileURL(tile_url, subdomains[0]);
 			}
+
+			var new_tile_url = tile_url.replace(/\{Z\}/gi,'{z}').replace(/\{X\}/gi,'{x}').replace(/\{Y\}/gi,'{y}');
 			
-			if(!map_type) {
-				overlay.addOptions({displayInLayerSwitcher: false, isBaseLayer: false});
-			}
+			var overlay = new ol.layer.TileLayer({
+			  source: new ol.source.XYZ({ //this source is not currently exported by openlayers3, so we have to use ol-simple.js until it is
+				attributions: [new ol.Attribution(attribution)],
+				url: new_tile_url,
+				crossOrigin: 'anonymous',
+				maxZoom : 18,
+				minZoom: 0,
+				opacity: opacity
+			  })
+			});
+			
 			map.addLayer(overlay);
-			OpenLayers.Util.onImageLoadErrorColor = "transparent"; //Otherwise missing tiles default to pink!			
 			this.tileLayers.push( [tile_url, overlay, true] );			
 		},
 
@@ -590,7 +483,7 @@ mxn.register('openlayers', {
 				map.events.register('mousemove', map, function (evt) {
 					var lonlat = map.getLonLatFromViewPortPx(evt.xy);
 					var point = new mxn.LatLonPoint();
-					point.fromProprietary('openlayers', lonlat);
+					point.fromProprietary('openlayersv3', lonlat);
 					var loc = point.lat.toFixed(4) + ' / ' + point.lon.toFixed(4);
 					locDisp.innerHTML = loc;
 				});
@@ -605,12 +498,12 @@ mxn.register('openlayers', {
 			var ollon = this.lon * 20037508.34 / 180;
 			var ollat = Math.log(Math.tan((90 + this.lat) * Math.PI / 360)) / (Math.PI / 180);
 			ollat = ollat * 20037508.34 / 180;
-			return new OpenLayers.LonLat(ollon, ollat);			
+			return [ollon, ollat];			 
 		},
 
 		fromProprietary: function(olPoint) {
-			var lon = (olPoint.lon / 20037508.34) * 180;
-			var lat = (olPoint.lat / 20037508.34) * 180;
+			var lon = (olPoint[0] / 20037508.34) * 180;
+			var lat = (olPoint[1] / 20037508.34) * 180;
 			lat = 180/Math.PI * (2 * Math.atan(Math.exp(lat * Math.PI / 180)) - Math.PI / 2);
 			this.lon = lon;
 			this.lng = this.lon;
@@ -621,78 +514,57 @@ mxn.register('openlayers', {
 
 	Marker: {
 
-		toProprietary: function() {
-			var size, anchor, style, marker, position;
-			if (!!this.iconSize) {
-				size = new OpenLayers.Size(this.iconSize[0], this.iconSize[1]);
-			}
-			else {
-				size = new OpenLayers.Size(21, 25);
-			}
+		toProprietary: function() {	
+			position = this.location.toProprietary('openlayersv3');		
+			point = new ol.geom.Point(position);		
 
-			if (!!this.iconAnchor) {
-				anchor = new OpenLayers.Pixel(-this.iconAnchor[0], -this.iconAnchor[1]);
-			}
-			else {
-				anchor = new OpenLayers.Pixel(-(size.w / 2), -size.h);
-			}
-
-			if (!!this.iconUrl) {
-				this.icon = new OpenLayers.Icon(this.iconUrl, size, anchor);
-			}
-			else {
-				this.icon = new OpenLayers.Icon('http://openlayers.org/dev/img/marker-gold.png', size, anchor);
-			}
-
-			style = {
-				cursor         : 'pointer',
-				externalGraphic: ((!!this.iconUrl) ? this.iconUrl : 'http://openlayers.org/dev/img/marker-gold.png'),
-				graphicTitle   : ((!!this.labelText) ? this.labelText : ''),
-				graphicHeight  : size.h,
-				graphicWidth   : size.w,
-				graphicOpacity : 1.0,
-				graphicXOffset : anchor.x,
-				graphicYOffset : anchor.y,
-				graphicZIndex  : (!!this.attributes.zIndex ? this.attributes.zIndex : 2)//,
-				// title       : this.labelText
+			this.proprietary_marker = new ol.Feature({});
+			this.proprietary_marker.setGeometry(point);
+			
+			var options = {
+				  url: this.iconUrl || 'http://openlayers.org/dev/img/marker-gold.png'
 			};
 
-			position = this.location.toProprietary('openlayers');
-			marker = new OpenLayers.Feature.Vector(
-			 new OpenLayers.Geometry.Point(position.lon,	position.lat),
-				null,
-				style);
-
+			if (this.iconAnchor) { //not supported in ol3 yet
+				options.xOffset = this.iconAnchor[0];
+				options.yOffset = this.iconAnchor[1];
+			}
+				
+			if (this.iconSize) {
+				options.width = this.iconSize[0];
+				options.height = this.iconSize[1];
+			}
+			
+			this.proprietary_marker.setSymbolizers([
+				new ol.style.Icon({
+				  url: this.iconUrl || 'http://openlayers.org/dev/img/marker-gold.png'
+				})
+			  ]);
+					
 			if (!!this.infoBubble) {
-				this.popup = new OpenLayers.Popup.FramedCloud(
-					null,
-					position,
-					new OpenLayers.Size(100, 100),
-					this.infoBubble,
-					this.icon,
-					true);
-				this.popup.autoSize = true;
-				this.popup.panMapIfOutOfView = true;
-				this.popup.fixedRelativePosition = false;
-				this.popup.feature = marker;
+				var popup = new ol.Overlay({
+				  map: this.map
+				  //element: document.createTextElement(this.infoBubble)
+				});
+
+				//popup.setPosition(point);
+				this.popup = popup;
 			}
 			else {
 				this.popup = null;
 			}
 
-			if (this.infoDiv){
-				// TODO
-			}
-			return marker;
+			return this.proprietary_marker;
 		},
 
 		openBubble: function() {		
+			/*
 			if (!!this.infoBubble) {
 				// Need to create a new popup in case setInfoBubble has been called
-				this.popup = new OpenLayers.Popup.FramedCloud(
+				this.popup = new ol.Popup.FramedCloud(
 					null,
-					this.location.toProprietary("openlayers"),
-					new OpenLayers.Size(100, 100),
+					this.location.toProprietary("openlayersv3"),
+					new ol.Size(100, 100),
 					this.infoBubble,
 					this.icon,
 					true);
@@ -706,6 +578,7 @@ mxn.register('openlayers', {
 				this.map.addPopup(this.popup, true);
 			}
 			this.openInfoBubble.fire( { 'marker': this } );
+			*/
 		},
 
 		closeBubble: function() {
@@ -737,17 +610,10 @@ mxn.register('openlayers', {
 		toProprietary: function() {
 			var coords = [];
 			var ring;
-			var style = {
-				strokeColor  : this.color,
-				strokeOpacity: this.opacity,
-				strokeWidth  : this.width,
-				fillColor    : this.fillColor,
-				fillOpacity  : this.opacity
-			};
-
+			
 			for (var i = 0, length = this.points.length ; i< length; i++){
-				var point = this.points[i].toProprietary("openlayers");
-				coords.push(new OpenLayers.Geometry.Point(point.lon, point.lat));
+				var point = this.points[i].toProprietary("openlayersv3");
+				coords.push(point);
 			}
 
 			if (this.closed) {
@@ -762,24 +628,35 @@ mxn.register('openlayers', {
 
 			if (this.closed) {
 				// a closed polygon
-				ring = new OpenLayers.Geometry.LinearRing(coords);
+				ring = new ol.geom.Polygon([coords]);
 			} else {
 				// a line
-				ring = new OpenLayers.Geometry.LineString(coords);
+				ring = new ol.geom.LineString(coords);
 			}
-
-			this.proprietary_polyline = new OpenLayers.Feature.Vector(ring, null, style);
+		
+			this.proprietary_polyline = new ol.Feature({});
+			this.proprietary_polyline.setGeometry(ring);
+			this.proprietary_polyline.setSymbolizers([
+				new ol.style.Stroke({
+					strokeColor: this.color,
+					strokeOpacity: this.opacity,
+					strokeWidth  : this.width}),
+				new ol.style.Fill({
+					fillColor    : this.fillColor,
+					fillOpacity  : this.opacity})
+					
+			]);
 			return this.proprietary_polyline;
 		},
 
 		show: function() {
-			delete this.proprietary_polyline.style.display;
-			this.proprietary_polyline.layer.redraw();		
+			//delete this.proprietary_polyline.style.display;
+			//this.proprietary_polyline.layer.redraw();		
 			},
 
 		hide: function() {
-			this.proprietary_polyline.style.display = 'none';
-			this.proprietary_polyline.layer.redraw();		
+			//this.proprietary_polyline.style.display = 'none';
+			//this.proprietary_polyline.layer.redraw();		
 		}
 	}
 

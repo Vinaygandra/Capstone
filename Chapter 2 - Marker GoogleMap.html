@@ -1,0 +1,33 @@
+<html>
+<head>
+<title>Map2: Markers - Vinay Gandra</title>
+<script
+src="http://maps.google.com/maps/api/js?sensor=false"
+type="text/javascript"></script>
+<script type="text/javascript" src="mxn.js?(googlev3)"></script>
+<style type="text/css">
+div#mymap {
+width: 800px;
+height: 550px;
+}
+</style>
+<script type="text/javascript">
+var mapstraction, marker;
+function create_map() {
+mapstraction = new mxn.Mapstraction('mymap', 'googlev3');
+mapstraction.setCenterAndZoom(new mxn.LatLonPoint(40.7320425,-74.0639755), 16)
+marker = new mxn.Marker(new mxn.LatLonPoint(40.7336028,-74.0637127));
+mapstraction.getMap().setOptions({zoomControl: true, panControl: true});
+mapstraction.addMapTypeControls();
+marker.setInfoBubble("Chase Bank");
+marker.setIcon('map-marker.png', [32, 32]);
+mapstraction.addMarker(marker);
+
+}
+
+</script>
+</head>
+<body onload="create_map()">
+<div id="mymap"></div>
+</body>
+</html>
