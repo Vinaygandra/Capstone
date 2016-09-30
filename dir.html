@@ -1,0 +1,66 @@
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>Coffee in the Middle</title>
+<style>
+div#mymap {
+width: 600px;
+height: 450px;
+}
+</style>
+<script type="text/javascript"
+src="http://ajax.googleapis.com/ajax/libs/jquery/1.3/jquery.min.js"></script>
+<script src="http://maps.google.com/maps?file=api&amp;v=2&amp;key=YOURKEY" type="text/
+javascript"></script>
+<script type="text/javascript" src="mxn.js?(google)"></script>
+<script type="text/javascript">
+var mapstraction;
+var gdir;
+function create_map() {
+mapstraction = new mxn.Mapstraction('mymap', 'google');
+mapstraction.addControls({"zoom":"large"});
+mapstraction.setCenterAndZoom(new mxn.LatLonPoint(42.37,- 71.11), 3);
+// Google-specific code for driving directions
+gdir = new google.maps.DirectionsService();
+}
+function goDir() {
+var start = document.getElementById('start').value;
+var end = document.getElementById('end').value;
+// Remove Markers and Polylines
+mapstraction.removeAllMarkers();
+mapstraction.removeAllPolylines();
+// Google-specific: load directions
+var diropt = {
+origin: start,
+destination: end,
+travelMode: google.maps.DirectionsTravelMode.DRIVING
+}
+gdirroute(diropt, addDir);
+}
+function addDir(response, status) {
+if (status == google.maps.DirectionsStatus.OK) {
+var gpts = response.routes[0].overview_path;
+var polypts = [];
+for (var i=0; i<gpts.length; i++) {
+polypts.push(new mxn.LatLonPoint(gpts[i].lat(), gpts[i].lng()));
+}
+// Add polyline to map
+var poly = new mxn.Polyline(polypts);
+mapstraction.addPolyline(poly);
+mapstraction.autoCenterAndZoom();
+// Find distance
+var dist = response.routes[0].legs[0].distance.value / 1000;
+// Find midpoint
+findMidpoint(polypts, dist);
+}
+}
+</script>
+</head>
+<body onload="create_map()">
+<form id="myform" onSubmit="wgoDir();return false;">
+Origin: <input type="text" id="start" />
+Destination: <input type="text" id="end" />
+<input type="submit" value="Go" />
+</form>
+<div id="mymap"></div>
+</body>
+</html>
