@@ -36,8 +36,22 @@
             else
               $("#error").append("Unable to retrieve your route<br />");
           }
+		  function getCoordinates(result) {
+            var currentRouteArray = result.routes[0];  //Returns a complex object containing the results of the current route
+            var currentRoute = currentRouteArray.overview_path; //Returns a simplified version of all the coordinates on the path
+
+
+            obj_newPolyline = new google.maps.Polyline({ map: map }); //a polyline just to verify my code is fetching the coordinates
+            var path = obj_newPolyline.getPath();
+            for (var x = 0; x < currentRoute.length; x++) {
+                var pos = new google.maps.LatLng(currentRoute[x].lat(), currentRoute[x].lng())
+                latArray[x] = currentRoute[x].lat(); //Returns the latitude
+                lngArray[x] = currentRoute[x].lng(); //Returns the longitude
+                path.push(pos);
+            }
         );
       }
+
 
       $(document).ready(function() {
         // If the browser supports the Geolocation API
